@@ -1,38 +1,54 @@
-import TelegramBot from "node-telegram-bot-api";
-import axios from "axios";
+import express from "express";
+import fetch from "node-fetch";
 
-const TELEGRAM_BOT_TOKEN = process.env.BOT_TOKEN;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const app = express();
+app.use(express.json());
 
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const API_KEY = process.env.OPENAI_API_KEY;
+const TELEGRAM_URL = `https://api.telegram.org/bot${TOKEN}`;
 
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const userMessage = msg.text;
+app.post("/webhook", async (req, res) => {
+  const message = req.body.message;
 
-  try {
-    const response = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: "You are a helpful assistant." },
-          { role: "user", content: userMessage }
-        ]
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-        },
-      }
-    );
+  if (!message || !message.text) return res.sendStatus(200);
 
-    const reply = response.data.choices[0].message.content;
-    bot.sendMessage(chatId, reply);
+  const userMessage = message.text;
+  const chatId = message.chat.id;
 
-  } catch (error) {
-    console.error("Error:", error.response?.data || error);
-    bot.sendMessage(chatId, "⚠️ Error: Please try again.");
-  }
+  // Send the message to OpenAI API
+  const completion = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are BitWatchTV AI assistant." },
+        { role: "user", content: userMessage }
+      ]
+    })
+  });
+
+  const data = await completion.json();
+  const reply = data.choices?.[0]?.message?.content || "Sorry, I cannot respond now.";
+
+  await fetch(`${TELEGRAM_URL}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: reply,
+    })
+  });
+
+  res.sendStatus(200);
 });
+
+app.get("/", (req, res) => {
+  res.send("BitWatchTV AI Bot is running!");
+});
+
+app.listen(3000, () => console.log("Server running on port 3000"));
