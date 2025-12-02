@@ -1,27 +1,38 @@
 import TelegramBot from "node-telegram-bot-api";
-import OpenAI from "openai";
+import axios from "axios";
 
-// Load variables
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const TELEGRAM_BOT_TOKEN = process.env.BOT_TOKEN;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-bot.on("message", async(msg) => {
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+
+bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
-  const userMessage = msg.text || "";
+  const userMessage = msg.text;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: userMessage }]
-    });
+    const response = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: "You are a helpful assistant." },
+          { role: "user", content: userMessage }
+        ]
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+      }
+    );
 
-    const reply = completion.choices[0].message.content;
+    const reply = response.data.choices[0].message.content;
     bot.sendMessage(chatId, reply);
 
   } catch (error) {
-    console.error("AI ERROR:", error);
-    bot.sendMessage(chatId, "⚠️ Error, try again later.");
+    console.error("Error:", error.response?.data || error);
+    bot.sendMessage(chatId, "⚠️ Error: Please try again.");
   }
 });
-
-console.log("🤖 Telegram AI Bot is running...");
